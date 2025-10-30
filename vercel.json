@@ -1,11 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/send-keep-alive-email",
-      "schedule": "0 8 * * *"
-    },
-    {
-      "path": "/api/check-and-send",
+      "path": "/api/combined-daily-check",
       "schedule": "0 5 * * *"
     }
   ]

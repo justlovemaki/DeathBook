@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
-import { kv } from '@vercel/kv';
+import { kvStore } from '@/lib/kv-storage';
 
 /**
  * POST /api/check-and-send
@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取最后一次活动时间戳
-    const lastActiveTimestamp = await kv.get<number>('last_active_timestamp');
+    const lastActiveTimestamp = await kvStore.get('last_active_timestamp');
     
     // 如果没有活动时间戳，说明系统还未激活，正常退出
     if (!lastActiveTimestamp) {
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
     console.log('最终邮件发送成功:', data);
 
     // 更新活动时间戳，防止重复发送
-    await kv.set('last_active_timestamp', currentTime);
+    await kvStore.set('last_active_timestamp', currentTime);
 
     return NextResponse.json({
       message: '最终邮件发送成功',
