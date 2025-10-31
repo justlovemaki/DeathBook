@@ -115,19 +115,22 @@ function getTimeHighlightHtml(timeRemaining: number): string {
 }
 
 /**
- * POST /api/combined-daily-check
  * 合并的每日检查定时任务：先发送生存检查邮件，再检查不活跃期是否超时
  * 由 Vercel Cron Job 触发
+ * @param request NextRequest 对象
+ * @param isCronRequest 是否来自定时任务的请求
  */
-export async function POST(request: NextRequest) {
+async function handleDailyCheck(request: NextRequest, isCronRequest: boolean = false) {
   try {
-    // 验证请求是否来自 Vercel Cron
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-      return NextResponse.json(
-        { error: '未授权访问' },
-        { status: 401 }
-      );
+    // 验证请求是否来自 Vercel Cron（仅对 POST 请求）
+    if (isCronRequest) {
+      const authHeader = request.headers.get('authorization');
+      if (!authHeader || authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+        return NextResponse.json(
+          { error: '未授权访问' },
+          { status: 401 }
+        );
+      }
     }
 
     // 检查必需的环境变量
@@ -645,4 +648,23 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+/**
+ * GET /api/combined-daily-check
+ * 获取每日检查状态信息（可用于健康检查和监控）
+ */
+export async function GET(request: NextRequest) {
+  console.log('收到 GET 请求 - 获取每日检查状态');
+  return await handleDailyCheck(request, true);
+}
+
+/**
+ * POST /api/combined-daily-check
+ * 合并的每日检查定时任务：先发送生存检查邮件，再检查不活跃期是否超时
+ * 由 Vercel Cron Job 触发
+ */
+export async function POST(request: NextRequest) {
+  console.log('收到 POST 请求 - 执行每日检查任务');
+  return await handleDailyCheck(request, true);
 }

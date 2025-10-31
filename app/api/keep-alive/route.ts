@@ -2,8 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { kvStore } from '@/lib/kv-storage';
 
 /**
- * POST /api/keep-alive
- * 重置用户不活跃计时器的端点
+ * GET /api/keep-alive
+ * 重置用户不活跃计时器的端点，并重定向到状态页面
  * 接收 secret 查询参数进行身份验证
  */
 export async function GET(request: NextRequest) {
@@ -15,58 +15,58 @@ export async function GET(request: NextRequest) {
 
     // 验证 secret 是否匹配环境变量
     if (!secret || secret !== process.env.KEEPALIVE_SECRET) {
-      return NextResponse.json(
-        { error: '未授权访问' },
-        { status: 401 }
-      );
+      // 重定向到状态页面显示错误
+      const errorUrl = new URL('/check-in', request.url);
+      errorUrl.searchParams.set('status', 'unauthorized');
+      errorUrl.searchParams.set('message', '未授权访问');
+      return NextResponse.redirect(errorUrl.toString());
     }
 
     // 验证时间戳是否存在且有效
     if (!timestamp) {
-      return NextResponse.json(
-        { error: '缺少时间戳参数' },
-        { status: 400 }
-      );
+      const errorUrl = new URL('/check-in', request.url);
+      errorUrl.searchParams.set('status', 'error');
+      errorUrl.searchParams.set('message', '缺少时间戳参数');
+      return NextResponse.redirect(errorUrl.toString());
     }
 
     // 验证时间戳是否为有效数字
     const expireTime = parseInt(timestamp);
     if (isNaN(expireTime)) {
-      return NextResponse.json(
-        { error: '无效的时间戳格式' },
-        { status: 400 }
-      );
+      const errorUrl = new URL('/check-in', request.url);
+      errorUrl.searchParams.set('status', 'error');
+      errorUrl.searchParams.set('message', '无效的时间戳格式');
+      return NextResponse.redirect(errorUrl.toString());
     }
 
     // 检查链接是否已过期
     const currentTime = Date.now();
     if (currentTime > expireTime) {
-      return NextResponse.json(
-        {
-          error: '链接已过期',
-          expiresAt: expireTime,
-          currentTime: currentTime,
-          message: '此链接已失效，请等待下次生存检查邮件'
-        },
-        { status: 410 } // 410 Gone
-      );
+      const errorUrl = new URL('/check-in', request.url);
+      errorUrl.searchParams.set('status', 'expired');
+      errorUrl.searchParams.set('expiresAt', expireTime.toString());
+      errorUrl.searchParams.set('currentTime', currentTime.toString());
+      errorUrl.searchParams.set('message', '此链接已失效，请等待下次生存检查邮件');
+      return NextResponse.redirect(errorUrl.toString());
     }
 
     // 将当前时间戳存储到 Vercel KV 或内存存储
     const currentTimestamp = Date.now();
     await kvStore.set('last_active_timestamp', currentTimestamp);
 
-    // 返回成功响应
-    return NextResponse.json({
-      message: '计时器已重置',
-      timestamp: currentTimestamp
-    });
+    // 重定向到成功状态页面
+    const successUrl = new URL('/check-in', request.url);
+    successUrl.searchParams.set('status', 'success');
+    successUrl.searchParams.set('timestamp', currentTimestamp.toString());
+    return NextResponse.redirect(successUrl.toString());
 
   } catch (error) {
     console.error('重置计时器时发生错误:', error);
-    return NextResponse.json(
-      { error: '内部服务器错误' },
-      { status: 500 }
-    );
+    
+    // 重定向到错误状态页面
+    const errorUrl = new URL('/check-in', request.url);
+    errorUrl.searchParams.set('status', 'error');
+    errorUrl.searchParams.set('message', '内部服务器错误');
+    return NextResponse.redirect(errorUrl.toString());
   }
 }
