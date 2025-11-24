@@ -37,20 +37,20 @@ async function shouldSendKeepAliveEmail(inactivityDays: string): Promise<{ shoul
     // 计算当前时间和最后一次活动时间的时间差
     const currentTime = Date.now();
     const timeDifference = currentTime - lastActiveTimestamp;
-    
     // 将不活跃天数转换为毫秒
     const inactivityThreshold = parseInt(inactivityDays) * 24 * 60 * 60 * 1000;
-    
+    const remainingTime = inactivityThreshold - timeDifference;
+
     // 检查是否超过不活跃阈值
-    if (timeDifference > inactivityThreshold) {
+    if (remainingTime <= 0) {
       return {
         shouldSend: false,
-        reason: '已超过不活跃期，不再发送生存检查邮件',
+        reason: '已超过不活跃时限，不再发送生存检查邮件',
         timeRemaining: 0
       };
     }
     
-    const remainingTime = inactivityThreshold - timeDifference;
+
     return {
       shouldSend: true,
       timeRemaining: remainingTime
@@ -62,10 +62,41 @@ async function shouldSendKeepAliveEmail(inactivityDays: string): Promise<{ shoul
 }
 
 /**
- * 检查最终邮件是否应该发送（3天限制）
+ * 检查最终邮件是否应该发送（基于不活跃时限和发送次数限制）
  */
-async function shouldSendFinalEmail(recipients: string[]): Promise<{ shouldSend: boolean; reason?: string }> {
+async function shouldSendFinalEmail(inactivityDays: string): Promise<{ shouldSend: boolean; reason?: string }> {
   try {
+    // 获取最后一次活动时间戳
+    const lastActiveTimestamp = await kvStore.get('last_active_timestamp');
+    
+    // 如果没有活动时间戳，说明系统还未激活，不发送
+    if (!lastActiveTimestamp) {
+      return {
+        shouldSend: false,
+        reason: '系统还未激活'
+      };
+    }
+    
+    // 计算当前时间和最后一次活动时间的时间差
+    const currentTime = Date.now();
+    const timeDifference = currentTime - lastActiveTimestamp;
+    
+    // 将不活跃天数转换为毫秒
+    const inactivityThreshold = parseInt(inactivityDays) * 24 * 60 * 60 * 1000;
+    
+    // 计算超出不活跃时限的天数
+    const excessDays = timeDifference - inactivityThreshold;
+    
+    // 判断逻辑：
+    // 1. 如果 excessDays <= 0，说明还在不活跃时限内，不发送数字遗产邮件
+    // 2. 如果 excessDays > 0，说明已超过不活跃时限，需要检查发送次数
+    if (excessDays <= 0) {
+      return {
+        shouldSend: false,
+        reason: '还在不活跃时限内，不发送数字遗产邮件'
+      };
+    }
+    
     // 获取最终邮件发送次数
     const finalEmailCount = await kvStore.get('final_email_sent_count') || 0;
     
@@ -80,7 +111,7 @@ async function shouldSendFinalEmail(recipients: string[]): Promise<{ shouldSend:
     return { shouldSend: true };
   } catch (error) {
     console.error('检查最终邮件发送条件时发生错误:', error);
-    return { shouldSend: true }; // 出错时默认发送
+    return { shouldSend: false }; // 出错时默认不发送
   }
 }
 
@@ -92,7 +123,7 @@ function getTimeHighlightHtml(timeRemaining: number): string {
     return `
       <div class="time-highlight expired">
         <h2 style="color: #dc3545; margin-bottom: 15px;">⏰ 已到期</h2>
-        <p style="color: #dc3545; font-size: 16px;">您的系统已超过不活跃期，将向指定联系人发送重要邮件</p>
+        <p style="color: #dc3545; font-size: 16px;">您的系统已超过不活跃时限，将向指定联系人发送重要邮件</p>
       </div>
     `;
   }
@@ -109,13 +140,13 @@ function getTimeHighlightHtml(timeRemaining: number): string {
         <span class="hours">${hours}</span>
         <span class="unit">小时</span>
       </div>
-      <p style="color: #6c757d; font-size: 14px; margin-top: 10px;">距离不活跃期剩余时间</p>
+      <p style="color: #6c757d; font-size: 14px; margin-top: 10px;">距离不活跃时限剩余时间</p>
     </div>
   `;
 }
 
 /**
- * 合并的每日检查定时任务：先发送生存检查邮件，再检查不活跃期是否超时
+ * 合并的每日检查定时任务：先发送生存检查邮件，再检查不活跃时限是否超时
  * 由 Vercel Cron Job 触发
  * @param request NextRequest 对象
  * @param isCronRequest 是否来自定时任务的请求
@@ -193,7 +224,7 @@ async function handleDailyCheck(request: NextRequest, isCronRequest: boolean = f
             const keepAliveUrl = `${vercelUrl}/api/keep-alive?secret=${keepAliveSecret}&timestamp=${expiresAt}`;
 
             // 生成时间高亮HTML
-            const timeHighlightHtml = getTimeHighlightHtml(shouldSendResult.timeRemaining || 0);
+            const timeHighlightHtml = getTimeHighlightHtml(shouldSendResult.timeRemaining || 99999);
 
             // 创建 HTML 邮件内容
             const emailHtml = `
@@ -383,16 +414,16 @@ async function handleDailyCheck(request: NextRequest, isCronRequest: boolean = f
       };
     }
 
-    // 第二步：检查不活跃期并发送最终邮件（如果配置了相关环境变量）
+    // 第二步：检查不活跃时限并发送最终邮件（如果配置了相关环境变量）
     if (recipientEmails && finalEmailSubject && farewellLetterHtml && importantInfoHtml && inactivityDays) {
       try {
-        console.log('第二步：检查不活跃期并发送最终邮件');
+        console.log('第二步：检查不活跃时限并发送最终邮件');
 
         // 解析收件人邮箱列表
         const recipients = recipientEmails.split(',').map(email => email.trim());
 
-        // 检查最终邮件是否应该发送（3天限制）
-        const shouldSendFinalResult = await shouldSendFinalEmail(recipients);
+        // 检查最终邮件是否应该发送（基于不活跃时限和发送次数限制）
+        const shouldSendFinalResult = await shouldSendFinalEmail(inactivityDays || '30');
         
         if (!shouldSendFinalResult.shouldSend) {
           console.log('不发送最终邮件:', shouldSendFinalResult.reason);
@@ -586,9 +617,6 @@ async function handleDailyCheck(request: NextRequest, isCronRequest: boolean = f
                 const currentCount = await kvStore.get('final_email_sent_count') || 0;
                 await kvStore.set('final_email_sent_count', currentCount + 1);
 
-                // 更新活动时间戳，防止重复发送
-                await kvStore.set('last_active_timestamp', Date.now());
-
                 results.finalCheck = {
                   status: 'sent',
                   message: '最终邮件发送成功',
@@ -602,7 +630,7 @@ async function handleDailyCheck(request: NextRequest, isCronRequest: boolean = f
           }
         }
       } catch (error) {
-        console.error('检查不活跃期时发生错误:', error);
+        console.error('检查不活跃时限时发生错误:', error);
         results.errors.push(`最终邮件检查异常: ${error instanceof Error ? error.message : '未知错误'}`);
         results.finalCheck = {
           status: 'error',
@@ -661,7 +689,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/combined-daily-check
- * 合并的每日检查定时任务：先发送生存检查邮件，再检查不活跃期是否超时
+ * 合并的每日检查定时任务：先发送生存检查邮件，再检查不活跃时限是否超时
  * 由 Vercel Cron Job 触发
  */
 export async function POST(request: NextRequest) {

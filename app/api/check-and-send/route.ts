@@ -4,7 +4,7 @@ import { kvStore } from '@/lib/kv-storage';
 
 /**
  * POST /api/check-and-send
- * 检查不活跃期是否超时，如果超时则发送最终邮件
+ * 检查不活跃时限是否超时，如果超时则发送最终邮件
  * 由 Vercel Cron Job 触发
  */
 export async function POST(request: NextRequest) {

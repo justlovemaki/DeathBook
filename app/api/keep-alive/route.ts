@@ -53,6 +53,7 @@ export async function GET(request: NextRequest) {
     // 将当前时间戳存储到 Vercel KV 或内存存储
     const currentTimestamp = Date.now();
     await kvStore.set('last_active_timestamp', currentTimestamp);
+    await kvStore.set('final_email_sent_count', 0);
 
     // 重定向到成功状态页面
     const successUrl = new URL('/check-in', request.url);
