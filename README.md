@@ -1,4 +1,4 @@
-# 数字遗产系统 (Dead Man's Switch)
+# 数字遗产系统 (Dead Man's Switch) 
 
 一个基于 Next.js 和 Vercel 的自动化数字遗产系统，可以在用户长期不活跃时自动向指定联系人发送包含重要信息的邮件。
 
