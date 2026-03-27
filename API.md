@@ -14,30 +14,27 @@
 
 **URL 参数**:
 - `secret` (必需): 保持活跃密钥，需与环境变量 `KEEPALIVE_SECRET` 匹配
+- `timestamp` (必需): 链接过期时间戳（毫秒），通常由系统自动生成的邮件提供（有效期 24 小时）
 
 **示例**:
 ```
-GET /api/keep-alive?secret=abc123xyz789
+GET /api/keep-alive?secret=abc123xyz789&timestamp=1700000000000
 ```
 
 **响应**:
-```json
-{
-  "message": "计时器已重置",
-  "timestamp": 1699000000000
-}
-```
+该端点将重定向至 `/check-in` 状态页面，并通过查询参数返回执行结果：
 
-**错误响应**:
-```json
-{
-  "error": "未授权访问"
-}
-```
+**成功**:
+重定向到 `/check-in?status=success&timestamp=1699000000000`
+
+**失败**:
+- 未授权：重定向到 `/check-in?status=unauthorized&message=未授权访问`
+- 链接过期：重定向到 `/check-in?status=expired&message=此链接已失效，请等待下次生存检查邮件`
+- 缺少参数：重定向到 `/check-in?status=error&message=缺少时间戳参数`
 
 **HTTP 状态码**:
-- `200`: 成功重置计时器
-- `401`: 密钥验证失败
+- `307/302`: 临时重定向到状态页面
+- `500`: 内部服务器错误（仅在重定向失败或逻辑崩溃时）
 
 ---
 

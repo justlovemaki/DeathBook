@@ -141,20 +141,16 @@ npm run dev
 
 ### API 端点
 
-#### `GET /api/keep-alive?secret=<KEEPALIVE_SECRET>`
+#### `GET /api/keep-alive?secret=<KEEPALIVE_SECRET>&timestamp=<TIMESTAMP>`
 
 重置用户不活跃计时器。
 
 **参数**:
 - `secret` (查询参数): 保持活跃密钥
+- `timestamp` (查询参数): 链接过期时间戳（由系统生成的邮件提供）
 
 **响应**:
-```json
-{
-  "message": "计时器已重置",
-  "timestamp": 1699000000000
-}
-```
+该端点将重定向至 `/check-in` 状态页面，并通过查询参数返回执行结果（如 `status=success`）。
 
 #### `POST /api/combined-daily-check`
 
